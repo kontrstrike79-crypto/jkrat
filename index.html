@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>Альфа-Контур ГКНБ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+body {
+    background-color: #000;
+    font-family: 'Montserrat', sans-serif;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ===== CRT сканлайны + виньетка ===== */
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,0.028) 0px,
+        rgba(255,255,255,0.028) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    pointer-events: none;
+    z-index: 999;
+    mix-blend-mode: overlay;
+    animation: scanMove 8s linear infinite;
+}
+@keyframes scanMove {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 100px; }
+}
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,0.88) 100%);
+    pointer-events: none;
+    z-index: 998;
+}
+
+/* ===== Глитч-оверлей ===== */
+#glitchOverlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 997;
+    opacity: 0;
+    background:
+        linear-gradient(90deg, rgba(255,0,60,0.15), transparent 30%, transparent 70%, rgba(0,180,255,0.15));
+    mix-blend-mode: screen;
+    transition: opacity 0.1s;
+}
+#glitchOverlay.active { opacity: 1; animation: glitchShift 0.35s steps(2) 2; }
+@keyframes glitchShift {
+    0%   { transform: translate(0, 0); }
+    25%  { transform: translate(-4px, 2px); }
+    50%  { transform: translate(3px, -2px); }
+    75%  { transform: translate(-2px, -1px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* ===== ЭКРАН БЛОКИРОВКИ ===== */
+#lockScreen {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.2rem;
+    padding: 2rem 1.5rem;
+    z-index: 100;
+    transition: opacity 0.7s ease, visibility 0.7s ease, transform 0.7s ease;
+}
+#lockScreen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: scale(1.05);
+}
+
+/* ===== Системная шапка ===== */
+.sys-header {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+}
+.sys-header .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ff3b3b;
+    margin-right: 6px;
+    box-shadow: 0 0 8px #ff3b3b;
+    animation: statusPulse 1.6s ease-in-out infinite;
+    vertical-align: middle;
+}
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+.sys-header .status-dot.green {
+    background: #34ff7f;
+    box-shadow: 0 0 8px #34ff7f;
+}
+
+/* ===== Значок замка ===== */
+.lock-badge {
+    width: 66px;
+    height: 66px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    animation: badgePulse 3s ease-in-out infinite;
+}
+.lock-badge svg {
+    width: 26px;
+    height: 26px;
+    stroke: rgba(255,255,255,0.9);
+    fill: none;
+    stroke-width: 1.5;
+    transition: stroke 0.3s;
+}
+.lock-badge.error svg { stroke: #ff3b3b; }
+.lock-badge.success svg { stroke: #34ff7f; }
+.lock-badge::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 50%;
+    animation: ringExpand 3s ease-in-out infinite;
+}
+@keyframes badgePulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.03); opacity: 0.85; }
+}
+@keyframes ringExpand {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.18); opacity: 0; }
+}
+
+/* ===== Заголовки ===== */
+.lock-title {
+    font-size: clamp(0.9rem, 3.5vw, 1.1rem);
+    font-weight: 300;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.9);
+}
+.lock-subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 400;
+    letter-spacing: 0.2em;
+    color: rgba(255,255,255,0.32);
+    margin-top: -0.8rem;
+    text-transform: uppercase;
+}
+
+/* ===== Точки-индикаторы ===== */
+.code-dots {
+    display: flex;
+    gap: 0.9rem;
+    margin: 0.4rem 0;
+}
+.code-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.4);
+    background: transparent;
+    transition: all 0.25s ease;
+}
+.code-dot.filled {
+    background: #fff;
+    border-color: #fff;
+    box-shadow: 0 0 12px rgba(255,255,255,0.7), 0 0 24px rgba(255,255,255,0.3);
+    transform: scale(1.1);
+}
+.code-dots.error .code-dot {
+    border-color: #ff3b3b;
+    background: rgba(255,59,59,0.15);
+    box-shadow: 0 0 12px rgba(255,59,59,0.5);
+}
+.code-dots.error { animation: shake 0.45s ease; }
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-10px); }
+    40% { transform: translateX(10px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+}
+.code-dots.success .code-dot {
+    border-color: #34ff7f;
+    background: #34ff7f;
+    box-shadow: 0 0 15px rgba(52,255,127,0.8);
+}
+
+/* ===== Сообщение об ошибке ===== */
+.error-text {
+    font-family: 'JetBrains Mono', monospace;
+    color: #ff3b3b;
+    font-size: 0.68rem;
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    height: 1rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.error-text.show { opacity: 1; }
+
+/* ===== Виртуальная клавиатура ===== */
+.keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+    max-width: 280px;
+    width: 100%;
+}
+.key {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 50%;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 400;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    justify-self: center;
+    position: relative;
+    overflow: hidden;
+    touch-action: manipulation;
+}
+.key::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.4), transparent 70%);
+    opacity: 0;
+    transform: scale(0);
+    transition: transform 0.4s, opacity 0.4s;
+    border-radius: 50%;
+}
+.key:active::before {
+    opacity: 0.4;
+    transform: scale(1.6);
+    transition: 0s;
+}
+.key:hover, .key:active {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.4);
+}
+.key:active { transform: scale(0.92); }
+.key.empty { visibility: hidden; }
+.key.backspace svg {
+    width: 22px;
+    height: 22px;
+    stroke: #fff;
+    fill: none;
+    stroke-width: 1.8;
+}
+
+/* ===== Таймер блокировки ===== */
+#lockoutTimer {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: #ff8a00;
+    text-transform: uppercase;
+    height: 1rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+#lockoutTimer.show { opacity: 1; }
+
+/* ===== ОСНОВНОЙ КОНТЕНТ ===== */
+#mainContent {
+    display: none;
+    opacity: 0;
+    width: 100%;
+    min-height: 100vh;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.8s ease;
+    flex-direction: column;
+}
+#mainContent.show {
+    display: flex;
+    opacity: 1;
+}
+
+.help-link {
+    position: absolute;
+    top: 30px;
+    right: 30px;
+    font-size: 0.85rem;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.55);
+    text-decoration: none;
+    transition: color 0.3s ease, border-color 0.3s ease;
+    z-index: 10;
+    padding: 0.5rem 1rem;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+}
+.help-link:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,0.5);
+    box-shadow: 0 0 20px rgba(255,255,255,0.1);
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.8rem;
+    padding: 2rem;
+    width: 100%;
+    max-width: 800px;
+}
+
+.quote {
+    font-size: clamp(0.75rem, 2vw, 0.9rem);
+    font-weight: 300;
+    line-height: 1.7;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.5);
+    max-width: 90%;
+    margin-bottom: 0.5rem;
+    animation: fadeUp 1s ease 0.2s both;
+}
+
+.logo-wrapper {
+    position: relative;
+    animation: fadeUp 1s ease 0.4s both;
+}
+.logo-img {
+    width: 140px;
+    height: auto;
+    opacity: 0.9;
+    transition: opacity 0.3s ease, transform 0.5s ease;
+    filter: drop-shadow(0 0 20px rgba(255,255,255,0.1));
+    display: block;
+}
+.logo-wrapper:hover .logo-img {
+    opacity: 1;
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 30px rgba(255,255,255,0.3));
+}
+.logo-wrapper::before {
+    content: '';
+    position: absolute;
+    inset: -20px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 50%;
+    animation: ringExpand 4s ease-in-out infinite;
+    pointer-events: none;
+}
+
+h1 {
+    font-size: clamp(2.8rem, 10vw, 5rem);
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #fff;
+    line-height: 1;
+    animation: fadeUp 1s ease 0.6s both, blink 2s infinite ease-in-out 1.6s;
+    text-shadow: 0 0 30px rgba(255,255,255,0.15);
+}
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
+
+.connecting-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(0.75rem, 2.2vw, 0.95rem);
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    text-transform: uppercase;
+    animation: fadeUp 1s ease 0.8s both;
+}
+.dot {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    background-color: rgba(255,255,255,0.8);
+    border-radius: 50%;
+    opacity: 0;
+    animation: pulse 1.5s infinite ease-in-out;
+}
+.dot:nth-child(1) { animation-delay: 0s; }
+.dot:nth-child(2) { animation-delay: 0.3s; }
+.dot:nth-child(3) { animation-delay: 0.6s; }
+@keyframes pulse {
+    0%, 100% { opacity: 0; transform: scale(0.8); }
+    50%      { opacity: 1; transform: scale(1.4); }
+}
+
+/* ===== Мобильная адаптация ===== */
+@media (max-width: 480px) {
+    .help-link {
+        top: 15px;
+        right: 15px;
+        font-size: 0.75rem;
+        padding: 0.4rem 0.8rem;
+    }
+    .quote { font-size: 0.7rem; margin-bottom: 0.5rem; }
+    .logo-img { width: 110px; }
+    h1 { font-size: 2.5rem; }
+    .key { width: 58px; height: 58px; font-size: 1.15rem; }
+    .keypad { gap: 0.6rem; max-width: 240px; }
+    .code-dot { width: 10px; height: 10px; }
+    .code-dots { gap: 0.75rem; }
+    .sys-header { font-size: 0.55rem; top: 12px; left: 12px; right: 12px; }
+}
+@media (min-width: 769px) {
+    .keypad { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div id="glitchOverlay"></div>
+
+<!-- ========== ЭКРАН ВВОДА КОДА ========== -->
+<div id="lockScreen">
+    <div class="sys-header">
+        <span><span class="status-dot" id="statusDot"></span><span id="statusText">ЗАБЛОКИРОВАНО</span></span>
+        <span id="clockDisplay">00:00:00</span>
+    </div>
+
+    <div class="lock-badge" id="lockBadge">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+    </div>
+
+    <div class="lock-title">Код доступа</div>
+    <p class="lock-subtitle">—ГКНБ КР—</p>
+
+    <div class="code-dots" id="codeDots">
+        <div class="code-dot"></div>
+        <div class="code-dot"></div>
+        <div class="code-dot"></div>
+        <div class="code-dot"></div>
+        <div class="code-dot"></div>
+        <div class="code-dot"></div>
+    </div>
+
+    <p class="error-text" id="errorText">Неверный код доступа</p>
+    <p id="lockoutTimer"></p>
+
+    <div class="keypad" id="keypad">
+        <div class="key" data-key="1">1</div>
+        <div class="key" data-key="2">2</div>
+        <div class="key" data-key="3">3</div>
+        <div class="key" data-key="4">4</div>
+        <div class="key" data-key="5">5</div>
+        <div class="key" data-key="6">6</div>
+        <div class="key" data-key="7">7</div>
+        <div class="key" data-key="8">8</div>
+        <div class="key" data-key="9">9</div>
+        <div class="key empty"></div>
+        <div class="key" data-key="0">0</div>
+        <div class="key backspace" data-key="back">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+                <line x1="18" y1="9" x2="12" y2="15"/>
+                <line x1="12" y1="9" x2="18" y2="15"/>
+            </svg>
+        </div>
+    </div>
+</div>
+
+<!-- ========== ОСНОВНОЙ КОНТЕНТ ========== -->
+<div id="mainContent">
+    <a href="https://t.me/GKNBKRBOT" class="help-link" target="_blank" rel="noopener">Помощь</a>
+
+    <div class="container">
+        <p class="quote">«Альфа-Контур» — подразделение специального назначения группы «А» ГКНБ Кыргызской Республики.</p>
+
+        <div class="logo-wrapper">
+            <img src="IMG_0526.jpg" alt="JKRAT Logo" class="logo-img" draggable="false">
+        </div>
+
+        <h1>«ГКНБ»</h1>
+
+        <div class="connecting-text">
+            Соединение с сервером
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    /* ====================================================
+       НАСТРОЙКИ
+       ==================================================== */
+    const SECRET_CODE = '200731';   // код доступа
+    const MAX_ATTEMPTS = 3;         // попыток до блокировки
+    const LOCKOUT_SEC  = 30;        // длительность блокировки (сек)
+    const REMEMBER_SESSION = false; // true = не спрашивать при обновлении
+
+    /* ==================================================== */
+
+    const lockScreen   = document.getElementById('lockScreen');
+    const mainContent  = document.getElementById('mainContent');
+    const errorText    = document.getElementById('errorText');
+    const lockoutTimer = document.getElementById('lockoutTimer');
+    const codeDots     = document.getElementById('codeDots');
+    const lockBadge    = document.getElementById('lockBadge');
+    const statusDot    = document.getElementById('statusDot');
+    const statusText   = document.getElementById('statusText');
+    const clockDisplay = document.getElementById('clockDisplay');
+    const glitchOverlay = document.getElementById('glitchOverlay');
+    const keypad       = document.getElementById('keypad');
+    const dots         = Array.from(codeDots.children);
+
+    let currentCode = '';
+    let isUnlocked  = false;
+    let isChecking  = false;
+    let attempts    = 0;
+    let lockedUntil = 0;
+
+    // ===== Часы =====
+    function updateClock() {
+        const d = new Date();
+        const p = n => String(n).padStart(2, '0');
+        clockDisplay.textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ===== Проверка сохранённой сессии =====
+    if (REMEMBER_SESSION && sessionStorage.getItem('gknb_auth') === '1') {
+        unlock(true);
+        return;
+    }
+
+    // ===== Звук (Web Audio) =====
+    let audioCtx = null;
+    function beep(freq, dur, type) {
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type || 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.08, audioCtx.currentTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+            osc.connect(gain).connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + dur);
+        } catch (e) {}
+    }
+
+    // ===== Отрисовка точек =====
+    function renderDots() {
+        dots.forEach((d, i) => {
+            d.classList.toggle('filled', i < currentCode.length);
+        });
+    }
+
+    // ===== Блокировка =====
+    function startLockout() {
+        lockedUntil = Date.now() + LOCKOUT_SEC * 1000;
+        updateLockoutDisplay();
+    }
+    function updateLockoutDisplay() {
+        const remain = Math.ceil((lockedUntil - Date.now()) / 1000);
+        if (remain > 0) {
+            lockoutTimer.textContent = `Блокировка: ${remain} с`;
+            lockoutTimer.classList.add('show');
+            setTimeout(updateLockoutDisplay, 500);
+        } else {
+            lockoutTimer.classList.remove('show');
+            attempts = 0;
+        }
+    }
+    function isLockedOut() {
+        return Date.now() < lockedUntil;
+    }
+
+    // ===== Ввод цифры =====
+    function addDigit(d) {
+        if (isUnlocked || isChecking || isLockedOut()) return;
+        if (currentCode.length >= 6) return;
+        currentCode += d;
+        renderDots();
+        clearError();
+        beep(880, 0.05, 'sine');
+        if (currentCode.length === 6) {
+            setTimeout(checkCode, 160);
+        }
+    }
+
+    // ===== Удаление цифры =====
+    function removeDigit() {
+        if (isUnlocked || isChecking || isLockedOut()) return;
+        if (currentCode.length === 0) return;
+        currentCode = currentCode.slice(0, -1);
+        renderDots();
+        clearError();
+        beep(440, 0.04, 'sine');
+    }
+
+    // ===== Очистка ошибки =====
+    function clearError() {
+        errorText.classList.remove('show');
+        codeDots.classList.remove('error');
+        lockBadge.classList.remove('error');
+    }
+
+    // ===== Показать ошибку =====
+    function showError() {
+        errorText.classList.add('show');
+        codeDots.classList.add('error');
+        lockBadge.classList.add('error');
+
+        glitchOverlay.classList.add('active');
+        setTimeout(() => glitchOverlay.classList.remove('active'), 700);
+
+        beep(180, 0.15, 'sawtooth');
+        setTimeout(() => beep(140, 0.2, 'sawtooth'), 100);
+
+        if (navigator.vibrate) navigator.vibrate([50, 30, 50, 30, 50]);
+
+        attempts++;
+
+        setTimeout(() => {
+            currentCode = '';
+            renderDots();
+            codeDots.classList.remove('error');
+            lockBadge.classList.remove('error');
+            isChecking = false;
+
+            if (attempts >= MAX_ATTEMPTS) {
+                startLockout();
+            } else {
+                const left = MAX_ATTEMPTS - attempts;
+                errorText.textContent = `Неверный код. Осталось: ${left}`;
+            }
+        }, 600);
+    }
+
+    // ===== Проверка кода =====
+    function checkCode() {
+        if (isChecking || isLockedOut()) return;
+        isChecking = true;
+
+        if (currentCode === SECRET_CODE) {
+            codeDots.classList.add('success');
+            lockBadge.classList.add('success');
+            statusDot.classList.add('green');
+            statusText.textContent = 'ДОСТУП РАЗРЕШЁН';
+            beep(660, 0.08, 'sine');
+            setTimeout(() => beep(880, 0.1, 'sine'), 90);
+            setTimeout(() => beep(1100, 0.15, 'sine'), 200);
+            if (navigator.vibrate) navigator.vibrate(80);
+            setTimeout(() => unlock(false), 500);
+        } else {
+            showError();
+        }
+    }
+
+    // ===== Разблокировка =====
+    function unlock(fromSession) {
+        isUnlocked = true;
+        if (REMEMBER_SESSION) sessionStorage.setItem('gknb_auth', '1');
+
+        lockScreen.classList.add('hidden');
+        mainContent.classList.add('show');
+        requestAnimationFrame(() => mainContent.classList.add('show'));
+
+        setTimeout(() => { lockScreen.style.display = 'none'; }, 700);
+    }
+
+    // ===== ФИЗИЧЕСКАЯ КЛАВИАТУРА (без input) =====
+    document.addEventListener('keydown', (e) => {
+        if (isUnlocked || lockScreen.style.display === 'none') return;
+
+        if (e.key >= '0' && e.key <= '9') {
+            e.preventDefault();
+            addDigit(e.key);
+        } else if (e.key === 'Backspace') {
+            e.preventDefault();
+            removeDigit();
+        } else if (e.key === 'Enter' && currentCode.length === 6) {
+            e.preventDefault();
+            checkCode();
+        }
+    });
+
+    // ===== ВИРТУАЛЬНАЯ КЛАВИАТУРА =====
+    // pointerdown + preventDefault = нативная клавиатура НЕ появляется
+    keypad.addEventListener('pointerdown', (e) => {
+        const keyEl = e.target.closest('.key');
+        if (!keyEl || keyEl.classList.contains('empty')) return;
+        e.preventDefault();
+
+        const k = keyEl.dataset.key;
+        if (k === 'back') removeDigit();
+        else addDigit(k);
+    }, { passive: false });
+
+    // ===== Дополнительная защита =====
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    document.addEventListener('dragstart',  e => e.preventDefault());
+    document.addEventListener('gesturestart', e => e.preventDefault());
+
+    // Блокируем двойной тап-зум на iOS
+    let lastTouch = 0;
+    document.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTouch < 300) e.preventDefault();
+        lastTouch = now;
+    }, { passive: false });
+})();
+</script>
+</body>
+</html>
